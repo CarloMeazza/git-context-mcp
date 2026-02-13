@@ -122,6 +122,32 @@ export const GitLogSchema = z.object({
     .describe("Maximum number of commits to show"),
 });
 
+/** Schema for the {@link GitTools.createBranch} tool input. */
+export const GitCreateBranchSchema = z.object({
+  repoPath: z.string().describe("The local path to the Git repository"),
+  branch: z.string().describe("The name of the new branch to create"),
+  checkout: z
+    .boolean()
+    .optional()
+    .default(true)
+    .describe("Whether to checkout the new branch after creation (default: true)"),
+  startPoint: z
+    .string()
+    .optional()
+    .describe("The commit, branch, or tag to start from (defaults to HEAD)"),
+});
+
+/** Schema for the {@link GitTools.merge} tool input. */
+export const GitMergeSchema = z.object({
+  repoPath: z.string().describe("The local path to the Git repository"),
+  branch: z.string().describe("The branch to merge into the current branch"),
+  noFf: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe("When true, always create a merge commit even for fast-forward merges (--no-ff)"),
+});
+
 // ---------------------------------------------------------------------------
 // Git Tools Implementation
 // ---------------------------------------------------------------------------
@@ -542,6 +568,87 @@ export class GitTools {
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to get log: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  /**
+   * Creates a new branch, optionally from a specific starting point.
+   *
+   * @param repoPath   - Absolute path to the local Git repository.
+   * @param branch     - Name of the new branch.
+   * @param checkout   - When `true` (default), switch to the new branch after creation.
+   * @param startPoint - Optional commit / branch / tag to branch from (defaults to HEAD).
+   * @returns MCP tool response confirming the branch creation.
+   * @throws {McpError} On failure (e.g. branch already exists).
+   */
+  static async createBranch(
+    repoPath: string,
+    branch: string,
+    checkout: boolean = true,
+    startPoint?: string,
+  ) {
+    try {
+      const git = this.getGit(repoPath);
+
+      if (checkout) {
+        // Create and switch in one step
+        const args = startPoint
+          ? ["-b", branch, startPoint]
+          : ["-b", branch];
+        await git.checkout(args);
+      } else {
+        // Create the branch without switching
+        const args = startPoint
+          ? [branch, startPoint]
+          : [branch];
+        await git.branch(args);
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Successfully created branch '${branch}'${
+              checkout ? " and checked out" : ""
+            }${startPoint ? ` from '${startPoint}'` : ""}`,
+          },
+        ],
+      };
+    } catch (error) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to create branch '${branch}': ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  /**
+   * Merges a branch into the current branch.
+   *
+   * @param repoPath - Absolute path to the local Git repository.
+   * @param branch   - Name of the branch to merge into the current branch.
+   * @param noFf     - When `true`, forces a merge commit even on fast-forward (`--no-ff`).
+   * @returns MCP tool response confirming the merge result.
+   * @throws {McpError} On merge failure (e.g. conflicts).
+   */
+  static async merge(repoPath: string, branch: string, noFf: boolean = false) {
+    try {
+      const git = this.getGit(repoPath);
+      const args = noFf ? ["--no-ff", branch] : [branch];
+      const result = await git.merge(args);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Successfully merged '${branch}' into current branch:\n${JSON.stringify(result, null, 2)}`,
+          },
+        ],
+      };
+    } catch (error) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to merge '${branch}': ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }

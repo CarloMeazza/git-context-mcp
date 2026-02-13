@@ -17,25 +17,28 @@ A lightweight Model Context Protocol (MCP) server for local Git operations.
 - `git_commit`: Commit changes to the repository.
 - `git_push`: Push changes to remote (automatically performs `pull --rebase` first).
 - `git_log`: Get the commit log of the repository.
+- `git_create_branch`: Create a new branch (optionally from a specific starting point).
+- `git_merge`: Merge a branch into the current branch (supports `--no-ff`).
 
 ## Setup
 
-1.  **Install dependencies**:
+1. **Install dependencies**:
 
-    ```bash
-    npm install
-    ```
+   ```bash
+   npm install
+   ```
 
-2.  **Build**:
+2. **Build**:
 
-    ```bash
-    npm run build
-    ```
+   ```bash
+   npm run build
+   ```
 
-3.  **Run**:
-    ```bash
-    npm run start
-    ```
+3. **Run**:
+
+   ```bash
+   npm run start
+   ```
 
 ## Testing
 
@@ -45,7 +48,7 @@ Run the integration test suite to verify all Git tools work correctly:
 npx tsx test_script.ts
 ```
 
-The script creates temporary local repositories, exercises all 13 tools (`clone`, `status`, `add`, `diff`, `commit`, `log`, `listFiles`, `readFile`, `listBranches`, `checkout`, `push`, `pull`, `reset`), and cleans up automatically.
+The script creates temporary local repositories, exercises all 15 tools (`clone`, `status`, `add`, `diff`, `commit`, `log`, `listFiles`, `readFile`, `listBranches`, `checkout`, `push`, `pull`, `reset`, `createBranch`, `merge`), and cleans up automatically.
 
 ## Configuration
 

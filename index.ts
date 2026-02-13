@@ -35,6 +35,8 @@ import {
   GitAddSchema,
   GitResetSchema,
   GitLogSchema,
+  GitCreateBranchSchema,
+  GitMergeSchema,
 } from "./tools/gitTools.js";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { z } from "zod";
@@ -61,6 +63,8 @@ enum ToolName {
   GIT_ADD = "git_add",
   GIT_RESET = "git_reset",
   GIT_LOG = "git_log",
+  GIT_CREATE_BRANCH = "git_create_branch",
+  GIT_MERGE = "git_merge",
 }
 
 // ---------------------------------------------------------------------------
@@ -181,6 +185,16 @@ class CodeContextServer {
           description: "Get the commit log of the repository",
           inputSchema: zodToJsonSchema(GitLogSchema),
         },
+        {
+          name: ToolName.GIT_CREATE_BRANCH,
+          description: "Create a new branch (optionally from a specific starting point)",
+          inputSchema: zodToJsonSchema(GitCreateBranchSchema),
+        },
+        {
+          name: ToolName.GIT_MERGE,
+          description: "Merge a branch into the current branch",
+          inputSchema: zodToJsonSchema(GitMergeSchema),
+        },
       ],
     }));
 
@@ -205,6 +219,22 @@ class CodeContextServer {
           case ToolName.GIT_CHECKOUT: {
             const args = input as z.infer<typeof GitCheckoutSchema>;
             return await GitTools.checkout(args.repoPath, args.branch);
+          }
+
+          case ToolName.GIT_CREATE_BRANCH: {
+            const args = input as z.infer<typeof GitCreateBranchSchema>;
+            return await GitTools.createBranch(
+              args.repoPath,
+              args.branch,
+              args.checkout,
+              args.startPoint,
+            );
+          }
+
+          // ── Merge operations ───────────────────────────────────────
+          case ToolName.GIT_MERGE: {
+            const args = input as z.infer<typeof GitMergeSchema>;
+            return await GitTools.merge(args.repoPath, args.branch, args.noFf);
           }
 
           // ── File operations ───────────────────────────────────────

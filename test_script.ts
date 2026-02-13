@@ -240,6 +240,55 @@ async function runTests() {
     assert("mixed reset returns success", resetMixed.content[0].text.includes("Successfully reset"));
     console.log();
 
+    // ── Test 14: Create Branch ────────────────────────────────────
+    console.log("--- Test 14: createBranch ---");
+    // Ensure we're on the main branch first
+    await GitTools.checkout(testDir, mainBranch);
+
+    // Create and checkout a new branch
+    const createResult = await GitTools.createBranch(testDir, "new-feature");
+    assert("createBranch returns success", createResult.content[0].text.includes("Successfully created"));
+    assert("createBranch mentions checkout", createResult.content[0].text.includes("checked out"));
+    const statusAfterCreate = await git.status();
+    assert("createBranch switched to new branch", statusAfterCreate.current === "new-feature");
+
+    // Create a branch without checkout
+    const createNoCheckout = await GitTools.createBranch(testDir, "no-checkout-branch", false);
+    assert("createBranch (no checkout) returns success", createNoCheckout.content[0].text.includes("Successfully created"));
+    const statusStillOnNew = await git.status();
+    assert("createBranch (no checkout) stays on current branch", statusStillOnNew.current === "new-feature");
+
+    // Create a branch from a specific start point
+    const createFromPoint = await GitTools.createBranch(testDir, "from-main", true, mainBranch);
+    assert("createBranch from startPoint returns success", createFromPoint.content[0].text.includes("Successfully created"));
+    assert("createBranch mentions startPoint", createFromPoint.content[0].text.includes(mainBranch));
+    console.log();
+
+    // ── Test 15: Merge ────────────────────────────────────────────
+    console.log("--- Test 15: merge ---");
+    // Switch to the feature-branch, add a commit, then merge into main
+    await GitTools.checkout(testDir, "feature-branch");
+    fs.writeFileSync(path.join(testDir, "merge_test.txt"), "merge content");
+    await git.add("merge_test.txt");
+    await git.commit("Commit for merge test");
+
+    // Switch to main and merge feature-branch (fast-forward)
+    await GitTools.checkout(testDir, mainBranch);
+    const mergeResult = await GitTools.merge(testDir, "feature-branch");
+    assert("merge returns success", mergeResult.content[0].text.includes("Successfully merged"));
+    assert("merged file exists", fs.existsSync(path.join(testDir, "merge_test.txt")));
+
+    // Test --no-ff merge
+    await GitTools.checkout(testDir, "new-feature");
+    fs.writeFileSync(path.join(testDir, "noff_test.txt"), "no-ff content");
+    await git.add("noff_test.txt");
+    await git.commit("Commit for no-ff merge");
+
+    await GitTools.checkout(testDir, mainBranch);
+    const mergeNoFf = await GitTools.merge(testDir, "new-feature", true);
+    assert("merge --no-ff returns success", mergeNoFf.content[0].text.includes("Successfully merged"));
+    console.log();
+
     // ── Summary ───────────────────────────────────────────────────
     console.log("═".repeat(40));
     console.log(`  Total: ${passed + failed}  |  ✅ ${passed}  |  ❌ ${failed}`);
