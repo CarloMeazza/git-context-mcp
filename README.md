@@ -37,6 +37,16 @@ A lightweight Model Context Protocol (MCP) server for local Git operations.
     npm run start
     ```
 
+## Testing
+
+Run the integration test suite to verify all Git tools work correctly:
+
+```bash
+npx tsx test_script.ts
+```
+
+The script creates temporary local repositories, exercises all 13 tools (`clone`, `status`, `add`, `diff`, `commit`, `log`, `listFiles`, `readFile`, `listBranches`, `checkout`, `push`, `pull`, `reset`), and cleans up automatically.
+
 ## Configuration
 
 ```json
