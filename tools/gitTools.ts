@@ -14,6 +14,7 @@ import { simpleGit, SimpleGit } from "simple-git";
 import path from "path";
 import fs from "fs";
 import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
+import { logger } from "./logger.js";
 
 // ---------------------------------------------------------------------------
 // Input Schemas
