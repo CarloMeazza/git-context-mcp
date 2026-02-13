@@ -165,17 +165,22 @@ export class GitTools {
    * Returns a `SimpleGit` instance bound to the given repository path.
    *
    * @param repoPath - Absolute path to the local Git repository.
+   * @param options - Optional configuration including timeout settings.
    * @returns A configured `SimpleGit` instance.
    * @throws {McpError} If the path does not exist on the filesystem.
    */
-  private static getGit(repoPath: string): SimpleGit {
+  private static getGit(repoPath: string, options?: { timeout?: number }): SimpleGit {
     if (!fs.existsSync(repoPath)) {
       throw new McpError(
         ErrorCode.InvalidParams,
         `Path does not exist: ${repoPath}`,
       );
     }
-    return simpleGit(repoPath);
+    return simpleGit(repoPath, {
+      timeout: {
+        block: options?.timeout || 30000, // 30 seconds default for blocking operations
+      },
+    });
   }
 
   /**
@@ -204,6 +209,34 @@ export class GitTools {
         ErrorCode.InternalError,
         `Git pull --rebase failed and was aborted to restore state. Error: ${error instanceof Error ? error.message : String(error)}`,
       );
+    }
+  }
+
+  /**
+   * Detects the default branch of the repository (main or master).
+   *
+   * Modern repositories typically use 'main', while older ones use 'master'.
+   * This method checks for both and returns the appropriate one.
+   *
+   * @param git - An initialised `SimpleGit` instance.
+   * @returns The name of the default branch.
+   */
+  private static async getDefaultBranch(git: SimpleGit): Promise<string> {
+    try {
+      const branches = await git.branch();
+      // Check for 'main' first (modern convention)
+      if (branches.all.includes('main')) {
+        return 'main';
+      }
+      // Fall back to 'master'
+      if (branches.all.includes('master')) {
+        return 'master';
+      }
+      // If neither exists, return the current branch
+      return branches.current || 'main';
+    } catch {
+      // Default fallback
+      return 'main';
     }
   }
 
@@ -296,7 +329,8 @@ ${JSON.stringify(result, null, 2)}`,
         };
       }
 
-      const git = simpleGit();
+      // Use longer timeout for clone operations (60 seconds)
+      const git = simpleGit({ timeout: { block: 60000 } });
       await git.clone(repoUrl, localPath);
 
       return {

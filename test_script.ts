@@ -289,6 +289,34 @@ async function runTests() {
     assert("merge --no-ff returns success", mergeNoFf.content[0].text.includes("Successfully merged"));
     console.log();
 
+    // ── Test 16: Error Handling ───────────────────────────────────
+    console.log("--- Test 16: Error Handling ---");
+    
+    // Test path traversal protection
+    try {
+      await GitTools.readFile(testDir, "../../etc/passwd");
+      assert("readFile blocks path traversal", false);
+    } catch (error) {
+      assert("readFile throws for path traversal", error instanceof Error);
+    }
+
+    // Test nonexistent file
+    try {
+      await GitTools.readFile(testDir, "nonexistent.txt");
+      assert("readFile throws for missing file", false);
+    } catch (error) {
+      assert("readFile throws for missing file", error instanceof Error);
+    }
+
+    // Test invalid repository path
+    try {
+      await GitTools.status("/nonexistent/path");
+      assert("status throws for invalid path", false);
+    } catch (error) {
+      assert("status throws for invalid path", error instanceof Error);
+    }
+    console.log();
+
     // ── Summary ───────────────────────────────────────────────────
     console.log("═".repeat(40));
     console.log(`  Total: ${passed + failed}  |  ✅ ${passed}  |  ❌ ${failed}`);
