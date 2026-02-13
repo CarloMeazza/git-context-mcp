@@ -15,6 +15,7 @@ import {
   GitListFilesSchema,
   GitReadFileSchema,
   GitPullSchema,
+  GitCommitSchema,
 } from "./tools/gitTools.js";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { z } from "zod";
@@ -26,6 +27,7 @@ enum ToolName {
   GIT_LIST_FILES = "git_list_files",
   GIT_READ_FILE = "git_read_file",
   GIT_PULL = "git_pull",
+  GIT_COMMIT = "git_commit",
 }
 
 class CodeContextServer {
@@ -87,6 +89,11 @@ class CodeContextServer {
           description: "Pull changes from remote using rebase (mandatory)",
           inputSchema: zodToJsonSchema(GitPullSchema),
         },
+        {
+          name: ToolName.GIT_COMMIT,
+          description: "Commit changes to the repository",
+          inputSchema: zodToJsonSchema(GitCommitSchema),
+        },
       ],
     }));
 
@@ -129,6 +136,14 @@ class CodeContextServer {
           case ToolName.GIT_PULL:
             const pullArgs = input as z.infer<typeof GitPullSchema>;
             return await GitTools.pull(pullArgs.repoPath);
+
+          case ToolName.GIT_COMMIT:
+            const commitArgs = input as z.infer<typeof GitCommitSchema>;
+            return await GitTools.commit(
+              commitArgs.repoPath,
+              commitArgs.message,
+              commitArgs.add,
+            );
 
           default:
             throw new McpError(

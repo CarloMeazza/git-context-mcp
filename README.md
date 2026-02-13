@@ -2,6 +2,8 @@
 
 A lightweight Model Context Protocol (MCP) server for local Git operations.
 
+<!-- testing commit functionality -->
+
 ## Available Tools
 
 - `git_clone`: Clone a Git repository.
@@ -10,6 +12,7 @@ A lightweight Model Context Protocol (MCP) server for local Git operations.
 - `git_list_files`: List files in the repository.
 - `git_read_file`: Read the content of a file.
 - `git_pull`: Pull changes from remote (uses rebase).
+- `git_commit`: Commit changes to the repository.
 
 ## Setup
 

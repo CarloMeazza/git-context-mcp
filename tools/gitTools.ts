@@ -41,6 +41,18 @@ export const GitPullSchema = z.object({
   repoPath: z.string().describe("The local path to the Git repository"),
 });
 
+export const GitCommitSchema = z.object({
+  repoPath: z.string().describe("The local path to the Git repository"),
+  message: z.string().describe("The commit message"),
+  add: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe(
+      "Whether to add all tracked files before committing (equivalent to git commit -a)",
+    ),
+});
+
 /**
  * Git Tools Implementation
  */
@@ -72,6 +84,27 @@ export class GitTools {
       throw new McpError(
         ErrorCode.InternalError,
         `Git pull rebase failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  static async commit(repoPath: string, message: string, add: boolean = false) {
+    try {
+      const git = this.getGit(repoPath);
+      const args = add ? ["-a"] : [];
+      const result = await git.commit(message, args);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Successfully committed:\n${JSON.stringify(result, null, 2)}`,
+          },
+        ],
+      };
+    } catch (error) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Git commit failed: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }
