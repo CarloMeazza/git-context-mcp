@@ -206,23 +206,23 @@ class CodeContextServer {
         switch (name) {
           // ── Repository setup ──────────────────────────────────────
           case ToolName.GIT_CLONE: {
-            const args = input as z.infer<typeof GitCloneSchema>;
+            const args = GitCloneSchema.parse(input);
             return await GitTools.clone(args.repoUrl, args.localPath);
           }
 
           // ── Branch operations ─────────────────────────────────────
           case ToolName.GIT_LIST_BRANCHES: {
-            const args = input as z.infer<typeof GitListBranchesSchema>;
+            const args = GitListBranchesSchema.parse(input);
             return await GitTools.listBranches(args.repoPath);
           }
 
           case ToolName.GIT_CHECKOUT: {
-            const args = input as z.infer<typeof GitCheckoutSchema>;
+            const args = GitCheckoutSchema.parse(input);
             return await GitTools.checkout(args.repoPath, args.branch);
           }
 
           case ToolName.GIT_CREATE_BRANCH: {
-            const args = input as z.infer<typeof GitCreateBranchSchema>;
+            const args = GitCreateBranchSchema.parse(input);
             return await GitTools.createBranch(
               args.repoPath,
               args.branch,
@@ -233,40 +233,40 @@ class CodeContextServer {
 
           // ── Merge operations ───────────────────────────────────────
           case ToolName.GIT_MERGE: {
-            const args = input as z.infer<typeof GitMergeSchema>;
+            const args = GitMergeSchema.parse(input);
             return await GitTools.merge(args.repoPath, args.branch, args.noFf);
           }
 
           // ── File operations ───────────────────────────────────────
           case ToolName.GIT_LIST_FILES: {
-            const args = input as z.infer<typeof GitListFilesSchema>;
+            const args = GitListFilesSchema.parse(input);
             return await GitTools.listFiles(args.repoPath, args.recursive);
           }
 
           case ToolName.GIT_READ_FILE: {
-            const args = input as z.infer<typeof GitReadFileSchema>;
+            const args = GitReadFileSchema.parse(input);
             return await GitTools.readFile(args.repoPath, args.filePath);
           }
 
           // ── Sync operations ───────────────────────────────────────
           case ToolName.GIT_PULL: {
-            const args = input as z.infer<typeof GitPullSchema>;
+            const args = GitPullSchema.parse(input);
             return await GitTools.pull(args.repoPath);
           }
 
           case ToolName.GIT_PUSH: {
-            const args = input as z.infer<typeof GitPushSchema>;
+            const args = GitPushSchema.parse(input);
             return await GitTools.push(args.repoPath);
           }
 
           // ── Staging & committing ──────────────────────────────────
           case ToolName.GIT_ADD: {
-            const args = input as z.infer<typeof GitAddSchema>;
+            const args = GitAddSchema.parse(input);
             return await GitTools.add(args.repoPath, args.files);
           }
 
           case ToolName.GIT_COMMIT: {
-            const args = input as z.infer<typeof GitCommitSchema>;
+            const args = GitCommitSchema.parse(input);
             return await GitTools.commit(
               args.repoPath,
               args.message,
@@ -276,23 +276,23 @@ class CodeContextServer {
 
           // ── Inspection ────────────────────────────────────────────
           case ToolName.GIT_STATUS: {
-            const args = input as z.infer<typeof GitStatusSchema>;
+            const args = GitStatusSchema.parse(input);
             return await GitTools.status(args.repoPath);
           }
 
           case ToolName.GIT_DIFF: {
-            const args = input as z.infer<typeof GitDiffSchema>;
+            const args = GitDiffSchema.parse(input);
             return await GitTools.diff(args.repoPath, args.staged);
           }
 
           case ToolName.GIT_LOG: {
-            const args = input as z.infer<typeof GitLogSchema>;
+            const args = GitLogSchema.parse(input);
             return await GitTools.log(args.repoPath, args.maxCount);
           }
 
           // ── History manipulation ──────────────────────────────────
           case ToolName.GIT_RESET: {
-            const args = input as z.infer<typeof GitResetSchema>;
+            const args = GitResetSchema.parse(input);
             return await GitTools.reset(args.repoPath, args.mode);
           }
 
@@ -304,6 +304,15 @@ class CodeContextServer {
         }
       } catch (error) {
         if (error instanceof McpError) throw error;
+        
+        // Handle Zod validation errors
+        if (error instanceof z.ZodError) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            `Invalid parameters: ${error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`,
+          );
+        }
+        
         return {
           content: [
             {
