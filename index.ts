@@ -16,6 +16,12 @@ import {
   GitReadFileSchema,
   GitPullSchema,
   GitCommitSchema,
+  GitStatusSchema,
+  GitDiffSchema,
+  GitPushSchema,
+  GitAddSchema,
+  GitResetSchema,
+  GitLogSchema,
 } from "./tools/gitTools.js";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { z } from "zod";
@@ -28,6 +34,12 @@ enum ToolName {
   GIT_READ_FILE = "git_read_file",
   GIT_PULL = "git_pull",
   GIT_COMMIT = "git_commit",
+  GIT_STATUS = "git_status",
+  GIT_DIFF = "git_diff",
+  GIT_PUSH = "git_push",
+  GIT_ADD = "git_add",
+  GIT_RESET = "git_reset",
+  GIT_LOG = "git_log",
 }
 
 class CodeContextServer {
@@ -94,6 +106,36 @@ class CodeContextServer {
           description: "Commit changes to the repository",
           inputSchema: zodToJsonSchema(GitCommitSchema),
         },
+        {
+          name: ToolName.GIT_STATUS,
+          description: "Get the status of the repository",
+          inputSchema: zodToJsonSchema(GitStatusSchema),
+        },
+        {
+          name: ToolName.GIT_DIFF,
+          description: "Get the diff of the repository",
+          inputSchema: zodToJsonSchema(GitDiffSchema),
+        },
+        {
+          name: ToolName.GIT_PUSH,
+          description: "Push changes to remote (automatically performs pull --rebase first)",
+          inputSchema: zodToJsonSchema(GitPushSchema),
+        },
+        {
+          name: ToolName.GIT_ADD,
+          description: "Add files to staging area",
+          inputSchema: zodToJsonSchema(GitAddSchema),
+        },
+        {
+          name: ToolName.GIT_RESET,
+          description: "Reset the repository",
+          inputSchema: zodToJsonSchema(GitResetSchema),
+        },
+        {
+          name: ToolName.GIT_LOG,
+          description: "Get the commit log of the repository",
+          inputSchema: zodToJsonSchema(GitLogSchema),
+        },
       ],
     }));
 
@@ -144,6 +186,30 @@ class CodeContextServer {
               commitArgs.message,
               commitArgs.add,
             );
+
+          case ToolName.GIT_STATUS:
+            const statusArgs = input as z.infer<typeof GitStatusSchema>;
+            return await GitTools.status(statusArgs.repoPath);
+
+          case ToolName.GIT_DIFF:
+            const diffArgs = input as z.infer<typeof GitDiffSchema>;
+            return await GitTools.diff(diffArgs.repoPath, diffArgs.staged);
+
+          case ToolName.GIT_PUSH:
+            const pushArgs = input as z.infer<typeof GitPushSchema>;
+            return await GitTools.push(pushArgs.repoPath);
+
+          case ToolName.GIT_ADD:
+            const addArgs = input as z.infer<typeof GitAddSchema>;
+            return await GitTools.add(addArgs.repoPath, addArgs.files);
+
+          case ToolName.GIT_RESET:
+            const resetArgs = input as z.infer<typeof GitResetSchema>;
+            return await GitTools.reset(resetArgs.repoPath, resetArgs.mode);
+
+          case ToolName.GIT_LOG:
+            const logArgs = input as z.infer<typeof GitLogSchema>;
+            return await GitTools.log(logArgs.repoPath, logArgs.maxCount);
 
           default:
             throw new McpError(

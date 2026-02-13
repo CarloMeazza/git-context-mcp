@@ -53,6 +53,48 @@ export const GitCommitSchema = z.object({
     ),
 });
 
+export const GitStatusSchema = z.object({
+  repoPath: z.string().describe("The local path to the Git repository"),
+});
+
+export const GitDiffSchema = z.object({
+  repoPath: z.string().describe("The local path to the Git repository"),
+  staged: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe("Whether to show diff for staged changes"),
+});
+
+export const GitPushSchema = z.object({
+  repoPath: z.string().describe("The local path to the Git repository"),
+});
+
+export const GitAddSchema = z.object({
+  repoPath: z.string().describe("The local path to the Git repository"),
+  files: z
+    .array(z.string())
+    .describe("The files to add (use '.' for all files)"),
+});
+
+export const GitResetSchema = z.object({
+  repoPath: z.string().describe("The local path to the Git repository"),
+  mode: z
+    .enum(["soft", "mixed", "hard"])
+    .optional()
+    .default("mixed")
+    .describe("The reset mode (soft, mixed, hard)"),
+});
+
+export const GitLogSchema = z.object({
+  repoPath: z.string().describe("The local path to the Git repository"),
+  maxCount: z
+    .number()
+    .optional()
+    .default(10)
+    .describe("Maximum number of commits to show"),
+});
+
 /**
  * Git Tools Implementation
  */
@@ -67,11 +109,30 @@ export class GitTools {
     return simpleGit(repoPath);
   }
 
+  private static async safePullRebase(git: SimpleGit) {
+    try {
+      // Mandatory rebase for safety as requested by user
+      const result = await git.pull(["--rebase"]);
+      return result;
+    } catch (error) {
+      // If pull rebase fails, try to abort the rebase to leave repo in clean state
+      try {
+        await git.rebase(["--abort"]);
+      } catch (abortError) {
+        // Ignore abort errors (e.g. if rebase didn't even start)
+      }
+
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Git pull --rebase failed and was aborted to restore state. Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   static async pull(repoPath: string) {
     try {
       const git = this.getGit(repoPath);
-      // Mandatory rebase for safety as requested by user
-      const result = await git.pull(["--rebase"]);
+      const result = await this.safePullRebase(git);
       return {
         content: [
           {
@@ -81,9 +142,10 @@ export class GitTools {
         ],
       };
     } catch (error) {
+      if (error instanceof McpError) throw error;
       throw new McpError(
         ErrorCode.InternalError,
-        `Git pull rebase failed: ${error instanceof Error ? error.message : String(error)}`,
+        `Git pull failed: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }
@@ -214,6 +276,109 @@ export class GitTools {
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to read file: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  static async status(repoPath: string) {
+    try {
+      const git = this.getGit(repoPath);
+      const status = await git.status();
+      return {
+        content: [{ type: "text", text: JSON.stringify(status, null, 2) }],
+      };
+    } catch (error) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to get status: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  static async diff(repoPath: string, staged: boolean = false) {
+    try {
+      const git = this.getGit(repoPath);
+      const args = staged ? ["--staged"] : [];
+      const diff = await git.diff(args);
+      return {
+        content: [{ type: "text", text: diff }],
+      };
+    } catch (error) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to get diff: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  static async push(repoPath: string) {
+    try {
+      const git = this.getGit(repoPath);
+      // Mandatory pull --rebase before push, using safe helper
+      await this.safePullRebase(git);
+      const result = await git.push();
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Successfully pushed (after pull --rebase):\n${JSON.stringify(result, null, 2)}`,
+          },
+        ],
+      };
+    } catch (error) {
+      if (error instanceof McpError) throw error;
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to push: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  static async add(repoPath: string, files: string[]) {
+    try {
+      const git = this.getGit(repoPath);
+      await git.add(files);
+      return {
+        content: [
+          { type: "text", text: `Successfully added files: ${files.join(", ")}` },
+        ],
+      };
+    } catch (error) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to add files: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  static async reset(repoPath: string, mode: "soft" | "mixed" | "hard" = "mixed") {
+    try {
+      const git = this.getGit(repoPath);
+      await git.reset(mode === "hard" ? ["--hard"] : mode === "soft" ? ["--soft"] : ["--mixed"]);
+      return {
+        content: [
+          { type: "text", text: `Successfully reset repository (mode: ${mode})` },
+        ],
+      };
+    } catch (error) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to reset: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  static async log(repoPath: string, maxCount: number = 10) {
+    try {
+      const git = this.getGit(repoPath);
+      const log = await git.log({ maxCount });
+      return {
+        content: [{ type: "text", text: JSON.stringify(log, null, 2) }],
+      };
+    } catch (error) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to get log: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }
