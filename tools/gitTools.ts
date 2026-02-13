@@ -1,10 +1,25 @@
+/**
+ * @module tools/gitTools
+ * @description Core Git operations module for the MCP server.
+ *
+ * Provides Zod-validated input schemas and a stateless `GitTools` utility class
+ * that wraps {@link https://www.npmjs.com/package/simple-git simple-git} to
+ * expose every supported Git command as an MCP-compatible tool response.
+ *
+ * @license MIT
+ */
+
 import { z } from "zod";
 import { simpleGit, SimpleGit } from "simple-git";
 import path from "path";
 import fs from "fs";
 import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
 
-// Input schemas
+// ---------------------------------------------------------------------------
+// Input Schemas
+// ---------------------------------------------------------------------------
+
+/** Schema for the {@link GitTools.clone} tool input. */
 export const GitCloneSchema = z.object({
   repoUrl: z.string().describe("The URL of the Git repository to clone"),
   localPath: z
@@ -12,15 +27,18 @@ export const GitCloneSchema = z.object({
     .describe("The local path where the repository should be cloned"),
 });
 
+/** Schema for the {@link GitTools.listBranches} tool input. */
 export const GitListBranchesSchema = z.object({
   repoPath: z.string().describe("The local path to the Git repository"),
 });
 
+/** Schema for the {@link GitTools.checkout} tool input. */
 export const GitCheckoutSchema = z.object({
   repoPath: z.string().describe("The local path to the Git repository"),
   branch: z.string().describe("The branch name to checkout"),
 });
 
+/** Schema for the {@link GitTools.listFiles} tool input. */
 export const GitListFilesSchema = z.object({
   repoPath: z.string().describe("The local path to the Git repository"),
   recursive: z
@@ -30,6 +48,7 @@ export const GitListFilesSchema = z.object({
     .describe("Whether to list files recursively"),
 });
 
+/** Schema for the {@link GitTools.readFile} tool input. */
 export const GitReadFileSchema = z.object({
   repoPath: z.string().describe("The local path to the Git repository"),
   filePath: z
@@ -37,10 +56,12 @@ export const GitReadFileSchema = z.object({
     .describe("The relative path to the file within the repository"),
 });
 
+/** Schema for the {@link GitTools.pull} tool input. */
 export const GitPullSchema = z.object({
   repoPath: z.string().describe("The local path to the Git repository"),
 });
 
+/** Schema for the {@link GitTools.commit} tool input. */
 export const GitCommitSchema = z.object({
   repoPath: z.string().describe("The local path to the Git repository"),
   message: z.string().describe("The commit message"),
@@ -53,10 +74,12 @@ export const GitCommitSchema = z.object({
     ),
 });
 
+/** Schema for the {@link GitTools.status} tool input. */
 export const GitStatusSchema = z.object({
   repoPath: z.string().describe("The local path to the Git repository"),
 });
 
+/** Schema for the {@link GitTools.diff} tool input. */
 export const GitDiffSchema = z.object({
   repoPath: z.string().describe("The local path to the Git repository"),
   staged: z
@@ -66,10 +89,12 @@ export const GitDiffSchema = z.object({
     .describe("Whether to show diff for staged changes"),
 });
 
+/** Schema for the {@link GitTools.push} tool input. */
 export const GitPushSchema = z.object({
   repoPath: z.string().describe("The local path to the Git repository"),
 });
 
+/** Schema for the {@link GitTools.add} tool input. */
 export const GitAddSchema = z.object({
   repoPath: z.string().describe("The local path to the Git repository"),
   files: z
@@ -77,6 +102,7 @@ export const GitAddSchema = z.object({
     .describe("The files to add (use '.' for all files)"),
 });
 
+/** Schema for the {@link GitTools.reset} tool input. */
 export const GitResetSchema = z.object({
   repoPath: z.string().describe("The local path to the Git repository"),
   mode: z
@@ -86,6 +112,7 @@ export const GitResetSchema = z.object({
     .describe("The reset mode (soft, mixed, hard)"),
 });
 
+/** Schema for the {@link GitTools.log} tool input. */
 export const GitLogSchema = z.object({
   repoPath: z.string().describe("The local path to the Git repository"),
   maxCount: z
@@ -95,10 +122,26 @@ export const GitLogSchema = z.object({
     .describe("Maximum number of commits to show"),
 });
 
+// ---------------------------------------------------------------------------
+// Git Tools Implementation
+// ---------------------------------------------------------------------------
+
 /**
- * Git Tools Implementation
+ * Stateless utility class that wraps `simple-git` to provide MCP-compatible
+ * Git operations.
+ *
+ * Every public method returns an object shaped as
+ * `{ content: [{ type: "text", text: string }] }` so it can be passed
+ * directly as an MCP tool response.
  */
 export class GitTools {
+  /**
+   * Returns a `SimpleGit` instance bound to the given repository path.
+   *
+   * @param repoPath - Absolute path to the local Git repository.
+   * @returns A configured `SimpleGit` instance.
+   * @throws {McpError} If the path does not exist on the filesystem.
+   */
   private static getGit(repoPath: string): SimpleGit {
     if (!fs.existsSync(repoPath)) {
       throw new McpError(
@@ -109,17 +152,26 @@ export class GitTools {
     return simpleGit(repoPath);
   }
 
+  /**
+   * Performs a `git pull --rebase` with automatic rollback on failure.
+   *
+   * If the rebase encounters conflicts it is aborted so the repository
+   * is left in a clean state rather than mid-rebase.
+   *
+   * @param git - An initialised `SimpleGit` instance.
+   * @returns The pull result on success.
+   * @throws {McpError} If the pull fails (rebase is aborted automatically).
+   */
   private static async safePullRebase(git: SimpleGit) {
     try {
-      // Mandatory rebase for safety as requested by user
       const result = await git.pull(["--rebase"]);
       return result;
     } catch (error) {
-      // If pull rebase fails, try to abort the rebase to leave repo in clean state
+      // Attempt to abort the rebase so the repo isn't left in a broken state
       try {
         await git.rebase(["--abort"]);
-      } catch (abortError) {
-        // Ignore abort errors (e.g. if rebase didn't even start)
+      } catch {
+        // Ignore – rebase may not have started at all
       }
 
       throw new McpError(
@@ -129,6 +181,17 @@ export class GitTools {
     }
   }
 
+  // -----------------------------------------------------------------------
+  // Public Tool Methods
+  // -----------------------------------------------------------------------
+
+  /**
+   * Pulls remote changes using `--rebase` (mandatory).
+   *
+   * @param repoPath - Absolute path to the local Git repository.
+   * @returns MCP tool response with the pull result.
+   * @throws {McpError} On pull failure.
+   */
   static async pull(repoPath: string) {
     try {
       const git = this.getGit(repoPath);
@@ -150,6 +213,15 @@ export class GitTools {
     }
   }
 
+  /**
+   * Creates a new commit in the repository.
+   *
+   * @param repoPath - Absolute path to the local Git repository.
+   * @param message  - Commit message.
+   * @param add      - When `true`, stages all tracked files before committing (`-a` flag).
+   * @returns MCP tool response with the commit details.
+   * @throws {McpError} On commit failure.
+   */
   static async commit(repoPath: string, message: string, add: boolean = false) {
     try {
       const git = this.getGit(repoPath);
@@ -171,6 +243,17 @@ export class GitTools {
     }
   }
 
+  /**
+   * Clones a remote repository to a local path.
+   *
+   * If the target directory already exists and is non-empty the clone is
+   * skipped and a descriptive message is returned instead of throwing.
+   *
+   * @param repoUrl   - URL of the remote Git repository.
+   * @param localPath - Destination path for the clone.
+   * @returns MCP tool response confirming the clone result.
+   * @throws {McpError} On clone failure.
+   */
   static async clone(repoUrl: string, localPath: string) {
     try {
       if (fs.existsSync(localPath) && fs.readdirSync(localPath).length > 0) {
@@ -203,6 +286,13 @@ export class GitTools {
     }
   }
 
+  /**
+   * Lists all local and remote branches in the repository.
+   *
+   * @param repoPath - Absolute path to the local Git repository.
+   * @returns MCP tool response with branch information as JSON.
+   * @throws {McpError} On failure.
+   */
   static async listBranches(repoPath: string) {
     try {
       const git = this.getGit(repoPath);
@@ -218,6 +308,14 @@ export class GitTools {
     }
   }
 
+  /**
+   * Checks out the specified branch.
+   *
+   * @param repoPath - Absolute path to the local Git repository.
+   * @param branch   - Name of the branch to checkout.
+   * @returns MCP tool response confirming the checkout.
+   * @throws {McpError} On checkout failure.
+   */
   static async checkout(repoPath: string, branch: string) {
     try {
       const git = this.getGit(repoPath);
@@ -235,12 +333,20 @@ export class GitTools {
     }
   }
 
+  /**
+   * Lists files tracked by Git using `git ls-tree`.
+   *
+   * @param repoPath  - Absolute path to the local Git repository.
+   * @param recursive - Whether to list files in subdirectories (`-r` flag).
+   * @returns MCP tool response with a JSON array of file paths.
+   * @throws {McpError} On failure.
+   */
   static async listFiles(repoPath: string, recursive: boolean = true) {
     try {
       const git = this.getGit(repoPath);
       const args = ["ls-tree", "-r", "--name-only", "HEAD"];
       if (!recursive) {
-        // Remove -r for non-recursive listing
+        // Remove the `-r` flag to restrict listing to the top-level tree
         args.splice(1, 1);
       }
 
@@ -258,6 +364,14 @@ export class GitTools {
     }
   }
 
+  /**
+   * Reads the content of a file from the repository's working tree.
+   *
+   * @param repoPath - Absolute path to the local Git repository.
+   * @param filePath - Relative path to the file within the repository.
+   * @returns MCP tool response containing the file content as plain text.
+   * @throws {McpError} If the file does not exist or cannot be read.
+   */
   static async readFile(repoPath: string, filePath: string) {
     try {
       const fullPath = path.join(repoPath, filePath);
@@ -280,6 +394,13 @@ export class GitTools {
     }
   }
 
+  /**
+   * Returns the working-tree status of the repository.
+   *
+   * @param repoPath - Absolute path to the local Git repository.
+   * @returns MCP tool response with status information as JSON.
+   * @throws {McpError} On failure.
+   */
   static async status(repoPath: string) {
     try {
       const git = this.getGit(repoPath);
@@ -295,6 +416,14 @@ export class GitTools {
     }
   }
 
+  /**
+   * Returns the diff of the working tree or staged changes.
+   *
+   * @param repoPath - Absolute path to the local Git repository.
+   * @param staged   - When `true`, shows only staged (`--staged`) changes.
+   * @returns MCP tool response with the unified diff output.
+   * @throws {McpError} On failure.
+   */
   static async diff(repoPath: string, staged: boolean = false) {
     try {
       const git = this.getGit(repoPath);
@@ -311,10 +440,20 @@ export class GitTools {
     }
   }
 
+  /**
+   * Pushes local commits to the remote.
+   *
+   * A `pull --rebase` is executed automatically before pushing to ensure a
+   * linear history and reduce the chance of push rejections.
+   *
+   * @param repoPath - Absolute path to the local Git repository.
+   * @returns MCP tool response confirming the push result.
+   * @throws {McpError} On push or pre-push rebase failure.
+   */
   static async push(repoPath: string) {
     try {
       const git = this.getGit(repoPath);
-      // Mandatory pull --rebase before push, using safe helper
+      // Mandatory pull --rebase before push to enforce linear history
       await this.safePullRebase(git);
       const result = await git.push();
       return {
@@ -334,6 +473,14 @@ export class GitTools {
     }
   }
 
+  /**
+   * Stages files for the next commit.
+   *
+   * @param repoPath - Absolute path to the local Git repository.
+   * @param files    - Array of file paths to stage (use `['.']` for all files).
+   * @returns MCP tool response listing the staged files.
+   * @throws {McpError} On failure.
+   */
   static async add(repoPath: string, files: string[]) {
     try {
       const git = this.getGit(repoPath);
@@ -351,6 +498,14 @@ export class GitTools {
     }
   }
 
+  /**
+   * Resets the current HEAD to its previous state.
+   *
+   * @param repoPath - Absolute path to the local Git repository.
+   * @param mode     - Reset mode: `"soft"`, `"mixed"` (default), or `"hard"`.
+   * @returns MCP tool response confirming the reset.
+   * @throws {McpError} On failure.
+   */
   static async reset(repoPath: string, mode: "soft" | "mixed" | "hard" = "mixed") {
     try {
       const git = this.getGit(repoPath);
@@ -368,6 +523,14 @@ export class GitTools {
     }
   }
 
+  /**
+   * Retrieves the commit log.
+   *
+   * @param repoPath - Absolute path to the local Git repository.
+   * @param maxCount - Maximum number of commits to return (default: 10).
+   * @returns MCP tool response with the commit log as JSON.
+   * @throws {McpError} On failure.
+   */
   static async log(repoPath: string, maxCount: number = 10) {
     try {
       const git = this.getGit(repoPath);

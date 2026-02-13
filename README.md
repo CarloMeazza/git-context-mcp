@@ -2,8 +2,6 @@
 
 A lightweight Model Context Protocol (MCP) server for local Git operations.
 
-<!-- testing commit functionality -->
-
 ## Available Tools
 
 - `git_clone`: Clone a Git repository.
