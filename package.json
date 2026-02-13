@@ -1,7 +1,7 @@
 {
-  "name": "@modelcontextprotocol/server-code-context",
+  "name": "git-mcp-server",
   "version": "0.1.0",
-  "description": "MCP server for code context from local git repositories",
+  "description": "MCP server for Git operations on local repositories",
   "license": "MIT",
   "type": "module",
   "bin": {

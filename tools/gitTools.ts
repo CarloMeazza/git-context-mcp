@@ -226,7 +226,8 @@ export class GitTools {
         content: [
           {
             type: "text",
-            text: `Successfully pulled with rebase:\n${JSON.stringify(result, null, 2)}`,
+            text: `Successfully pulled with rebase:
+${JSON.stringify(result, null, 2)}`,
           },
         ],
       };
@@ -257,11 +258,13 @@ export class GitTools {
         content: [
           {
             type: "text",
-            text: `Successfully committed:\n${JSON.stringify(result, null, 2)}`,
+            text: `Successfully committed:
+${JSON.stringify(result, null, 2)}`,
           },
         ],
       };
     } catch (error) {
+      if (error instanceof McpError) throw error;
       throw new McpError(
         ErrorCode.InternalError,
         `Git commit failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -305,6 +308,7 @@ export class GitTools {
         ],
       };
     } catch (error) {
+      if (error instanceof McpError) throw error;
       throw new McpError(
         ErrorCode.InternalError,
         `Git clone failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -327,6 +331,7 @@ export class GitTools {
         content: [{ type: "text", text: JSON.stringify(branches, null, 2) }],
       };
     } catch (error) {
+      if (error instanceof McpError) throw error;
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to list branches: ${error instanceof Error ? error.message : String(error)}`,
@@ -352,6 +357,7 @@ export class GitTools {
         ],
       };
     } catch (error) {
+      if (error instanceof McpError) throw error;
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to checkout branch ${branch}: ${error instanceof Error ? error.message : String(error)}`,
@@ -383,6 +389,7 @@ export class GitTools {
         content: [{ type: "text", text: JSON.stringify(files, null, 2) }],
       };
     } catch (error) {
+      if (error instanceof McpError) throw error;
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to list files: ${error instanceof Error ? error.message : String(error)}`,
@@ -400,7 +407,18 @@ export class GitTools {
    */
   static async readFile(repoPath: string, filePath: string) {
     try {
-      const fullPath = path.join(repoPath, filePath);
+      // Normalize paths to prevent directory traversal attacks
+      const fullPath = path.resolve(path.join(repoPath, filePath));
+      const normalizedRepoPath = path.resolve(repoPath);
+
+      // Verify that the file is within the repository
+      if (!fullPath.startsWith(normalizedRepoPath + path.sep) && fullPath !== normalizedRepoPath) {
+        throw new McpError(
+          ErrorCode.InvalidParams,
+          `File path must be within the repository: ${filePath}`,
+        );
+      }
+
       if (!fs.existsSync(fullPath)) {
         throw new McpError(
           ErrorCode.InvalidParams,
@@ -413,6 +431,8 @@ export class GitTools {
         content: [{ type: "text", text: content }],
       };
     } catch (error) {
+      // Preserve McpError instances
+      if (error instanceof McpError) throw error;
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to read file: ${error instanceof Error ? error.message : String(error)}`,
@@ -435,6 +455,7 @@ export class GitTools {
         content: [{ type: "text", text: JSON.stringify(status, null, 2) }],
       };
     } catch (error) {
+      if (error instanceof McpError) throw error;
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to get status: ${error instanceof Error ? error.message : String(error)}`,
@@ -459,6 +480,7 @@ export class GitTools {
         content: [{ type: "text", text: diff }],
       };
     } catch (error) {
+      if (error instanceof McpError) throw error;
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to get diff: ${error instanceof Error ? error.message : String(error)}`,
@@ -486,7 +508,8 @@ export class GitTools {
         content: [
           {
             type: "text",
-            text: `Successfully pushed (after pull --rebase):\n${JSON.stringify(result, null, 2)}`,
+            text: `Successfully pushed (after pull --rebase):
+${JSON.stringify(result, null, 2)}`,
           },
         ],
       };
@@ -517,6 +540,7 @@ export class GitTools {
         ],
       };
     } catch (error) {
+      if (error instanceof McpError) throw error;
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to add files: ${error instanceof Error ? error.message : String(error)}`,
@@ -542,6 +566,7 @@ export class GitTools {
         ],
       };
     } catch (error) {
+      if (error instanceof McpError) throw error;
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to reset: ${error instanceof Error ? error.message : String(error)}`,
@@ -565,6 +590,7 @@ export class GitTools {
         content: [{ type: "text", text: JSON.stringify(log, null, 2) }],
       };
     } catch (error) {
+      if (error instanceof McpError) throw error;
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to get log: ${error instanceof Error ? error.message : String(error)}`,
@@ -616,6 +642,7 @@ export class GitTools {
         ],
       };
     } catch (error) {
+      if (error instanceof McpError) throw error;
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to create branch '${branch}': ${error instanceof Error ? error.message : String(error)}`,
@@ -641,11 +668,13 @@ export class GitTools {
         content: [
           {
             type: "text",
-            text: `Successfully merged '${branch}' into current branch:\n${JSON.stringify(result, null, 2)}`,
+            text: `Successfully merged '${branch}' into current branch:
+${JSON.stringify(result, null, 2)}`,
           },
         ],
       };
     } catch (error) {
+      if (error instanceof McpError) throw error;
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to merge '${branch}': ${error instanceof Error ? error.message : String(error)}`,
