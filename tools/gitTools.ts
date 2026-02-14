@@ -168,20 +168,50 @@ export class GitTools {
    * @param repoPath - Absolute path to the local Git repository.
    * @param options - Optional configuration including timeout settings.
    * @returns A configured `SimpleGit` instance.
-   * @throws {McpError} If the path does not exist on the filesystem.
+   * @throws {McpError} If the path does not exist or is not a valid Git repository.
    */
-  private static getGit(repoPath: string, options?: { timeout?: number }): SimpleGit {
+  private static async getGit(
+    repoPath: string,
+    options?: { timeout?: number },
+  ): Promise<SimpleGit> {
     if (!fs.existsSync(repoPath)) {
+      logger.error("Path does not exist", { repoPath });
       throw new McpError(
         ErrorCode.InvalidParams,
         `Path does not exist: ${repoPath}`,
       );
     }
-    return simpleGit(repoPath, {
+
+    const git = simpleGit(repoPath, {
       timeout: {
         block: options?.timeout || 30000, // 30 seconds default for blocking operations
       },
     });
+
+    // Verify it's a valid Git repository
+    try {
+      const isRepo = await git.checkIsRepo();
+      if (!isRepo) {
+        logger.error("Path is not a Git repository", { repoPath });
+        throw new McpError(
+          ErrorCode.InvalidParams,
+          `Path is not a Git repository: ${repoPath}`,
+        );
+      }
+    } catch (error) {
+      if (error instanceof McpError) throw error;
+      logger.error("Failed to check if path is a Git repository", {
+        repoPath,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to verify Git repository: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+
+    logger.debug("Git instance created", { repoPath });
+    return git;
   }
 
   /**
@@ -254,7 +284,7 @@ export class GitTools {
    */
   static async pull(repoPath: string) {
     try {
-      const git = this.getGit(repoPath);
+      const git = await this.getGit(repoPath);
       const result = await this.safePullRebase(git);
       return {
         content: [
@@ -285,9 +315,11 @@ ${JSON.stringify(result, null, 2)}`,
    */
   static async commit(repoPath: string, message: string, add: boolean = false) {
     try {
-      const git = this.getGit(repoPath);
+      const git = await this.getGit(repoPath);
+      logger.info("Committing changes", { repoPath, message, add });
       const args = add ? ["-a"] : [];
       const result = await git.commit(message, args);
+      logger.info("Commit successful", { repoPath, commitHash: result.commit });
       return {
         content: [
           {
@@ -320,6 +352,7 @@ ${JSON.stringify(result, null, 2)}`,
   static async clone(repoUrl: string, localPath: string) {
     try {
       if (fs.existsSync(localPath) && fs.readdirSync(localPath).length > 0) {
+        logger.warn("Clone target directory exists and is not empty", { localPath });
         return {
           content: [
             {
@@ -332,7 +365,9 @@ ${JSON.stringify(result, null, 2)}`,
 
       // Use longer timeout for clone operations (60 seconds)
       const git = simpleGit({ timeout: { block: 60000 } });
+      logger.info("Cloning repository", { repoUrl, localPath });
       await git.clone(repoUrl, localPath);
+      logger.info("Clone successful", { repoUrl, localPath });
 
       return {
         content: [
@@ -344,6 +379,7 @@ ${JSON.stringify(result, null, 2)}`,
       };
     } catch (error) {
       if (error instanceof McpError) throw error;
+      logger.error("Git clone failed", { repoUrl, localPath, error });
       throw new McpError(
         ErrorCode.InternalError,
         `Git clone failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -360,7 +396,7 @@ ${JSON.stringify(result, null, 2)}`,
    */
   static async listBranches(repoPath: string) {
     try {
-      const git = this.getGit(repoPath);
+      const git = await this.getGit(repoPath);
       const branches = await git.branch();
       return {
         content: [{ type: "text", text: JSON.stringify(branches, null, 2) }],
@@ -384,7 +420,7 @@ ${JSON.stringify(result, null, 2)}`,
    */
   static async checkout(repoPath: string, branch: string) {
     try {
-      const git = this.getGit(repoPath);
+      const git = await this.getGit(repoPath);
       await git.checkout(branch);
       return {
         content: [
@@ -410,7 +446,7 @@ ${JSON.stringify(result, null, 2)}`,
    */
   static async listFiles(repoPath: string, recursive: boolean = true) {
     try {
-      const git = this.getGit(repoPath);
+      const git = await this.getGit(repoPath);
       const args = ["ls-tree", "-r", "--name-only", "HEAD"];
       if (!recursive) {
         // Remove the `-r` flag to restrict listing to the top-level tree
@@ -448,6 +484,7 @@ ${JSON.stringify(result, null, 2)}`,
 
       // Verify that the file is within the repository
       if (!fullPath.startsWith(normalizedRepoPath + path.sep) && fullPath !== normalizedRepoPath) {
+        logger.warn("Potential path traversal attempt", { repoPath, filePath });
         throw new McpError(
           ErrorCode.InvalidParams,
           `File path must be within the repository: ${filePath}`,
@@ -455,19 +492,22 @@ ${JSON.stringify(result, null, 2)}`,
       }
 
       if (!fs.existsSync(fullPath)) {
+        logger.warn("File not found", { fullPath });
         throw new McpError(
           ErrorCode.InvalidParams,
           `File does not exist: ${filePath}`,
         );
       }
 
+      const git = await this.getGit(repoPath);
+      logger.debug("Reading file", { fullPath });
       const content = fs.readFileSync(fullPath, "utf-8");
       return {
         content: [{ type: "text", text: content }],
       };
     } catch (error) {
-      // Preserve McpError instances
       if (error instanceof McpError) throw error;
+      logger.error("Error reading file", { repoPath, filePath, error });
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to read file: ${error instanceof Error ? error.message : String(error)}`,
@@ -484,8 +524,10 @@ ${JSON.stringify(result, null, 2)}`,
    */
   static async status(repoPath: string) {
     try {
-      const git = this.getGit(repoPath);
+      const git = await this.getGit(repoPath);
+      logger.debug("Checking repository status", { repoPath });
       const status = await git.status();
+      logger.debug("Status check complete", { repoPath });
       return {
         content: [{ type: "text", text: JSON.stringify(status, null, 2) }],
       };
@@ -508,7 +550,7 @@ ${JSON.stringify(result, null, 2)}`,
    */
   static async diff(repoPath: string, staged: boolean = false) {
     try {
-      const git = this.getGit(repoPath);
+      const git = await this.getGit(repoPath);
       const args = staged ? ["--staged"] : [];
       const diff = await git.diff(args);
       return {
@@ -535,7 +577,7 @@ ${JSON.stringify(result, null, 2)}`,
    */
   static async push(repoPath: string) {
     try {
-      const git = this.getGit(repoPath);
+      const git = await this.getGit(repoPath);
       // Mandatory pull --rebase before push to enforce linear history
       await this.safePullRebase(git);
       const result = await git.push();
@@ -567,8 +609,10 @@ ${JSON.stringify(result, null, 2)}`,
    */
   static async add(repoPath: string, files: string[]) {
     try {
-      const git = this.getGit(repoPath);
+      const git = await this.getGit(repoPath);
+      logger.info("Staging files", { repoPath, files });
       await git.add(files);
+      logger.info("Files staged successfully", { repoPath });
       return {
         content: [
           { type: "text", text: `Successfully added files: ${files.join(", ")}` },
@@ -593,7 +637,7 @@ ${JSON.stringify(result, null, 2)}`,
    */
   static async reset(repoPath: string, mode: "soft" | "mixed" | "hard" = "mixed") {
     try {
-      const git = this.getGit(repoPath);
+      const git = await this.getGit(repoPath);
       await git.reset(mode === "hard" ? ["--hard"] : mode === "soft" ? ["--soft"] : ["--mixed"]);
       return {
         content: [
@@ -619,7 +663,7 @@ ${JSON.stringify(result, null, 2)}`,
    */
   static async log(repoPath: string, maxCount: number = 10) {
     try {
-      const git = this.getGit(repoPath);
+      const git = await this.getGit(repoPath);
       const log = await git.log({ maxCount });
       return {
         content: [{ type: "text", text: JSON.stringify(log, null, 2) }],
@@ -650,7 +694,7 @@ ${JSON.stringify(result, null, 2)}`,
     startPoint?: string,
   ) {
     try {
-      const git = this.getGit(repoPath);
+      const git = await this.getGit(repoPath);
 
       if (checkout) {
         // Create and switch in one step
@@ -696,7 +740,7 @@ ${JSON.stringify(result, null, 2)}`,
    */
   static async merge(repoPath: string, branch: string, noFf: boolean = false) {
     try {
-      const git = this.getGit(repoPath);
+      const git = await this.getGit(repoPath);
       const args = noFf ? ["--no-ff", branch] : [branch];
       const result = await git.merge(args);
       return {

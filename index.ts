@@ -146,12 +146,12 @@ class CodeContextServer {
         },
         {
           name: ToolName.GIT_PULL,
-          description: "Pull changes from remote using rebase (mandatory)",
+          description: "Pull changes from remote using rebase (mandatory). Automatically aborts rebase on conflicts to keep repository clean",
           inputSchema: zodToJsonSchema(GitPullSchema),
         },
         {
           name: ToolName.GIT_COMMIT,
-          description: "Commit changes to the repository",
+          description: "Commit staged changes to the repository. Use 'add' parameter to stage all tracked files before committing (-a flag)",
           inputSchema: zodToJsonSchema(GitCommitSchema),
         },
         {
@@ -161,7 +161,7 @@ class CodeContextServer {
         },
         {
           name: ToolName.GIT_DIFF,
-          description: "Get the diff of the repository",
+          description: "Get the unified diff of working tree changes or staged changes. Use 'staged' parameter to show only changes ready for commit",
           inputSchema: zodToJsonSchema(GitDiffSchema),
         },
         {
@@ -177,22 +177,22 @@ class CodeContextServer {
         },
         {
           name: ToolName.GIT_RESET,
-          description: "Reset the repository",
+          description: "Reset current HEAD to the specified state. Supports soft (keep changes staged), mixed (unstage changes), and hard (discard all changes) modes",
           inputSchema: zodToJsonSchema(GitResetSchema),
         },
         {
           name: ToolName.GIT_LOG,
-          description: "Get the commit log of the repository",
+          description: "Get the commit log of the repository. Use 'maxCount' to limit the number of commits returned.",
           inputSchema: zodToJsonSchema(GitLogSchema),
         },
         {
           name: ToolName.GIT_CREATE_BRANCH,
-          description: "Create a new branch (optionally from a specific starting point)",
+          description: "Create a new branch (optionally from a specific starting point). Use 'checkout' to switch to the new branch immediately.",
           inputSchema: zodToJsonSchema(GitCreateBranchSchema),
         },
         {
           name: ToolName.GIT_MERGE,
-          description: "Merge a branch into the current branch",
+          description: "Merge a branch into the current branch. Use 'noFf' to create a merge commit even for fast-forward merges.",
           inputSchema: zodToJsonSchema(GitMergeSchema),
         },
       ],
