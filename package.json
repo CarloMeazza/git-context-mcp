@@ -11,6 +11,7 @@
     "dist"
   ],
   "scripts": {
+    "test": "npx tsx test_script.ts",
     "build": "tsc && shx chmod +x dist/*.js",
     "watch": "tsc --watch",
     "start": "node dist/index.js",
